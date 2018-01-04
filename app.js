@@ -11,7 +11,18 @@ var cors = require('cors')
 var app = express();
 
 // app.use(cors())
-app.use(cors({credentials: true, origin: 'http://localhost:4200'}));
+// var whitelist = ['http://localhost:4200', 'http://search.local.pl:8080', 'http://localhost:3000/images/653793.jpg']
+// var corsOptions = {
+//     origin: function (origin, callback) {
+//         if (whitelist.indexOf(origin) !== -1) {
+//             callback(null, true)
+//         } else {
+//             callback(new Error('Not allowed by CORS'))
+//         }
+//     },
+//     credentials: true
+// }
+app.use(cors());
 // view engine setup
 app.set('views', path.join(__dirname, 'views'));
 app.set('view engine', 'jade');
