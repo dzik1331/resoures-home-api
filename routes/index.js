@@ -3,8 +3,8 @@ var router = express.Router();
 var _ = require('lodash');
 var fs = require("fs");
 var pgp = require('pg-promise')(/*options*/)
-var db = pgp('postgres://postgres:Qwert!2345@localhost:5432/resources-list')
-// var db = pgp('postgres://p1069_words:Qwert!2345@pgsql15.mydevil.net:5432/p1069_words')
+var dataBaseConfig = require('../databaseConfig')
+var db = pgp(`postgres://${dataBaseConfig.user}:${dataBaseConfig.password}@${dataBaseConfig.host}/${dataBaseConfig.database}`)
 
 
 router.get('/list', function (req, res, next) {
@@ -70,7 +70,8 @@ router.post('/add', function (req, res, next) {
     console.log(req.body)
     var data = req.body;
     var sql = "INSERT INTO public.resources(title, author, date, type, img) VALUES ($1, $2, $3, $4, $5)";
-    db.query(sql, [data.title, data.author, new Date(), data.type, data.image.filename])
+    let imageName = data.image ? data.image.filename : '';
+    db.query(sql, [data.title, data.author, new Date(), data.type, imageName])
         .then(function (data) {
             res.json('OK');
         })
@@ -78,9 +79,44 @@ router.post('/add', function (req, res, next) {
             console.log('ERROR:', error)
         })
 
-    fs.writeFile("public/images/" + req.body.image.filename, req.body.image.value, 'base64', function (err) {
-        console.log(err);
-    });
+    if (!req.body.image) {
+        fs.writeFile("public/images/" + req.body.image.filename, req.body.image.value, 'base64', function (err) {
+            console.log(err);
+        });
+    }
+});
+
+/* EDYCJA*/
+router.put('/update/:id', function (req, res, next) {
+    var id = req.params.id;
+    var data = req.body;
+    console.log('update', data);
+    var sqlParams = [];
+    var imageName = data.image ? (new Date().getTime()) + data.image.filename : '';
+    if (data.image) {
+        console.log('Jest img')
+        var sql = "UPDATE public.resources SET title = $1, author = $2, date = $3, type = $4, img = $5 WHERE id = $6;";
+        sqlParams = [data.title, data.author, new Date(), data.type, imageName, id]
+    } else {
+        var sql = "UPDATE public.resources SET title = $1, author = $2, date = $3, type = $4 WHERE id = $5;";
+        sqlParams = [data.title, data.author, new Date(), data.type, id]
+    }
+    db.query(sql, sqlParams)
+        .then(function (dataRes) {
+            if (data.image) {
+                fs.writeFile("public/images/" + imageName, data.image.value, 'base64', function (err) {
+                    console.log(err);
+                    console.log('ok123');
+                    clearImageFolder();
+                });
+            }
+            res.json('OK');
+        })
+        .catch(function (error) {
+            console.log('ERROR:', error)
+        });
+
+
 });
 
 router.post('/addBorrow', function (req, res, next) {
@@ -98,7 +134,6 @@ router.post('/addBorrow', function (req, res, next) {
 
 router.get('/isReturn/:id', function (req, res, next) {
     console.log(req.body)
-    var data = req.body;
     var sql = "UPDATE public.borrows\n" +
         "SET \"active\"= false, \"returnDate\"=$1\n" +
         "WHERE id = $2;";
@@ -110,5 +145,58 @@ router.get('/isReturn/:id', function (req, res, next) {
             console.log('ERROR:', error)
         })
 });
+
+router.delete('/deleteBorrow/:id', function (req, res, next) {
+    console.log(req.body)
+    var data = req.body;
+    var sql = "DELETE FROM public.borrows\n" +
+        "WHERE id = $1;";
+    db.query(sql, [req.params.id])
+        .then(function (data) {
+            res.json('OK');
+        })
+        .catch(function (error) {
+            console.log('ERROR:', error)
+        })
+});
+
+router.delete('/deleteResource/:id', function (req, res, next) {
+    console.log(req.body)
+    var data = req.body;
+    var sql = "DELETE FROM public.resources\n" +
+        "WHERE id = $1;";
+    db.query(sql, [req.params.id])
+        .then(function (data) {
+            res.json('OK');
+        })
+        .catch(function (error) {
+            console.log('ERROR:', error)
+        })
+});
+
+router.get('/clearNoUsedImage', function (req, res, next) {
+    clearImageFolder();
+    res.json('OK');
+});
+
+var clearImageFolder = function () {
+    fs.readdir("public/images/", function (err, files) {
+        var imgDataBase = [];
+        var sql = "SELECT img FROM resources WHERE img IS NOT NULL AND img != '';"
+        db.query(sql)
+            .then(function (data) {
+                imgDataBase = data.map((item) => {
+                    return item.img;
+                })
+                var diff = files.diff(imgDataBase);
+                diff.forEach((file) => {
+                    fs.unlink('public/images/' + file);
+                })
+            })
+            .catch(function (error) {
+                console.log('ERROR:', error)
+            })
+    })
+}
 
 module.exports = router;
