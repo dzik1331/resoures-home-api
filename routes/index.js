@@ -70,20 +70,19 @@ router.post('/add', function (req, res, next) {
     console.log(req.body)
     var data = req.body;
     var sql = "INSERT INTO public.resources(title, author, date, type, img) VALUES ($1, $2, $3, $4, $5)";
-    let imageName = data.image ? data.image.filename : '';
+    var imageName = data.image ? (new Date().getTime()) + data.image.filename : '';
     db.query(sql, [data.title, data.author, new Date(), data.type, imageName])
         .then(function (data) {
+            if (req.body.image) {
+                fs.writeFile("public/images/" + imageName, req.body.image.value, 'base64', function (err) {
+                    console.log(err);
+                });
+            }
             res.json('OK');
         })
         .catch(function (error) {
             console.log('ERROR:', error)
         })
-
-    if (!req.body.image) {
-        fs.writeFile("public/images/" + req.body.image.filename, req.body.image.value, 'base64', function (err) {
-            console.log(err);
-        });
-    }
 });
 
 /* EDYCJA*/
