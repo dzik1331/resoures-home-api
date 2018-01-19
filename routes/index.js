@@ -15,16 +15,34 @@ router.get('/list', function (req, res, next) {
         "GROUP BY r.id, t.name, b.person"
     db.query(sql)
         .then(function (data) {
-            console.log('DATA:', data)
             res.json(data);
         })
         .catch(function (error) {
-            console.log('ERROR:', error)
+            console.error('ERROR:', error)
+        })
+});
+
+router.post('/list', function (req, res, next) {
+    var where = '';
+    if (req.body.filter) {
+        where += `WHERE title ~ '${req.body.filter}' OR title ~ '${req.body.filter.toUpperCase()}' OR title ~ '${req.body.filter.toLowerCase()}' OR title ~ '${req.body.filter.firstLower()}' OR title ~ '${req.body.filter.firstUpper()}'`;
+    }
+    var sql = "SELECT r.id, r.title, r.author, r.img, t.name AS type, r.date, CASE WHEN COUNT(b.id) = 0 THEN false ELSE true END as \"isBorrow\" \n" +
+        "FROM resources AS r \n" +
+        "LEFT JOIN types AS t ON t.id = r.type\n" +
+        "LEFT JOIN borrows as b on b.\"resourceId\" = r.id AND b.active\n" +
+        where + "\n" +
+        "GROUP BY r.id, t.name, b.person\n";
+    db.query(sql)
+        .then(function (data) {
+            res.json(data);
+        })
+        .catch(function (error) {
+            console.error('ERROR:', error)
         })
 });
 
 router.get('/get/:id', function (req, res, next) {
-    console.log(req.params);
     var sendData = {details: null, borrows: []}
     var sql = "SELECT r.id, r.title, r.author, r.img, t.name AS type, r.date\n" +
         "FROM resources AS r\n" +
@@ -36,20 +54,18 @@ router.get('/get/:id', function (req, res, next) {
         "WHERE b.\"resourceId\" = $1";
     db.query(sql, [req.params.id])
         .then(function (data) {
-            console.log('DATA:', data)
             sendData.details = data;
             db.query(sql2, [req.params.id])
                 .then(function (data) {
-                    console.log('DATA:', data)
                     sendData.borrows = data;
                     res.json(sendData);
                 })
                 .catch(function (error) {
-                    console.log('ERROR:', error)
+                    console.error('ERROR:', error)
                 })
         })
         .catch(function (error) {
-            console.log('ERROR:', error)
+            console.error('ERROR:', error)
             res.json(sendData);
         })
 });
@@ -58,11 +74,10 @@ router.get('/types', function (req, res, next) {
     var sql = "SELECT id, name from types";
     db.query(sql)
         .then(function (data) {
-            console.log('DATA:', data)
             res.json(data);
         })
         .catch(function (error) {
-            console.log('ERROR:', error)
+            console.error('ERROR:', error)
         })
 });
 
@@ -75,13 +90,15 @@ router.post('/add', function (req, res, next) {
         .then(function (data) {
             if (req.body.image) {
                 fs.writeFile("public/images/" + imageName, req.body.image.value, 'base64', function (err) {
-                    console.log(err);
+                    if (err) {
+                        console.error(err);
+                    }
                 });
             }
             res.json('OK');
         })
         .catch(function (error) {
-            console.log('ERROR:', error)
+            console.error('ERROR:', error)
         })
 });
 
@@ -89,11 +106,9 @@ router.post('/add', function (req, res, next) {
 router.put('/update/:id', function (req, res, next) {
     var id = req.params.id;
     var data = req.body;
-    console.log('update', data);
     var sqlParams = [];
     var imageName = data.image ? (new Date().getTime()) + data.image.filename : '';
     if (data.image) {
-        console.log('Jest img')
         var sql = "UPDATE public.resources SET title = $1, author = $2, date = $3, type = $4, img = $5 WHERE id = $6;";
         sqlParams = [data.title, data.author, new Date(), data.type, imageName, id]
     } else {
@@ -101,52 +116,50 @@ router.put('/update/:id', function (req, res, next) {
         sqlParams = [data.title, data.author, new Date(), data.type, id]
     }
     db.query(sql, sqlParams)
-        .then(function (dataRes) {
+        .then(function () {
             if (data.image) {
                 fs.writeFile("public/images/" + imageName, data.image.value, 'base64', function (err) {
-                    console.log(err);
-                    console.log('ok123');
+                    if (err) {
+                        console.error(err);
+                    }
                     clearImageFolder();
                 });
             }
             res.json('OK');
         })
         .catch(function (error) {
-            console.log('ERROR:', error)
+            console.error('ERROR:', error)
         });
 
 
 });
 
 router.post('/addBorrow', function (req, res, next) {
-    console.log(req.body)
     var data = req.body;
     var sql = "INSERT INTO public.borrows(active, \"resourceId\", person, \"borrowDate\") VALUES ($1, $2, $3, $4)";
     db.query(sql, [true, data.resourceId, data.person, new Date()])
-        .then(function (data) {
+        .then(function () {
             res.json('OK');
         })
         .catch(function (error) {
-            console.log('ERROR:', error)
+            console.error('ERROR:', error)
         })
 });
 
 router.get('/isReturn/:id', function (req, res, next) {
-    console.log(req.body)
     var sql = "UPDATE public.borrows\n" +
         "SET \"active\"= false, \"returnDate\"=$1\n" +
         "WHERE id = $2;";
     db.query(sql, [new Date(), req.params.id])
-        .then(function (data) {
+        .then(function () {
             res.json('OK');
         })
         .catch(function (error) {
-            console.log('ERROR:', error)
+            console.error('ERROR:', error)
         })
 });
 
 router.delete('/deleteBorrow/:id', function (req, res, next) {
-    console.log(req.body)
     var data = req.body;
     var sql = "DELETE FROM public.borrows\n" +
         "WHERE id = $1;";
@@ -155,12 +168,11 @@ router.delete('/deleteBorrow/:id', function (req, res, next) {
             res.json('OK');
         })
         .catch(function (error) {
-            console.log('ERROR:', error)
+            console.error('ERROR:', error)
         })
 });
 
 router.delete('/deleteResource/:id', function (req, res, next) {
-    console.log(req.body)
     var data = req.body;
     var sql = "DELETE FROM public.resources\n" +
         "WHERE id = $1;";
@@ -169,7 +181,7 @@ router.delete('/deleteResource/:id', function (req, res, next) {
             res.json('OK');
         })
         .catch(function (error) {
-            console.log('ERROR:', error)
+            console.error('ERROR:', error)
         })
 });
 
@@ -193,7 +205,7 @@ var clearImageFolder = function () {
                 })
             })
             .catch(function (error) {
-                console.log('ERROR:', error)
+                console.error('ERROR:', error)
             })
     })
 }
