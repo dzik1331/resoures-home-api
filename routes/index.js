@@ -7,11 +7,12 @@ var dataBaseConfig = require('../databaseConfig')
 var db = pgp(`postgres://${dataBaseConfig.user}:${dataBaseConfig.password}@${dataBaseConfig.host}/${dataBaseConfig.database}`)
 
 
-router.get('/list', function (req, res, next) {
+router.get('/list/:id', function (req, res, next) {
     var sql = "SELECT r.id, r.title, r.author, r.img, t.name AS type, r.date, CASE WHEN COUNT(b.id) = 0 THEN false ELSE true END as \"isBorrow\" \n" +
         "FROM resources AS r \n" +
         "LEFT JOIN types AS t ON t.id = r.type\n" +
         "LEFT JOIN borrows as b on b.\"resourceId\" = r.id AND b.active\n" +
+        `WHERE r.type = ${req.params.id}\n` +
         "GROUP BY r.id, t.name, b.person"
     db.query(sql)
         .then(function (data) {
@@ -22,10 +23,12 @@ router.get('/list', function (req, res, next) {
         })
 });
 
-router.post('/list', function (req, res, next) {
+router.post('/list/:id', function (req, res, next) {
     var where = '';
     if (req.body.filter) {
-        where += `WHERE title ~ '${req.body.filter}' OR title ~ '${req.body.filter.toUpperCase()}' OR title ~ '${req.body.filter.toLowerCase()}' OR title ~ '${req.body.filter.firstLower()}' OR title ~ '${req.body.filter.firstUpper()}'`;
+        where += `WHERE r.type = ${req.params.id} AND  (title ~ '${req.body.filter}' OR title ~ '${req.body.filter.toUpperCase()}' OR title ~ '${req.body.filter.toLowerCase()}' OR title ~ '${req.body.filter.firstLower()}' OR title ~ '${req.body.filter.firstUpper()}')`;
+    } else {
+        where += `WHERE r.type = ${req.params.id}`
     }
     var sql = "SELECT r.id, r.title, r.author, r.img, t.name AS type, r.date, CASE WHEN COUNT(b.id) = 0 THEN false ELSE true END as \"isBorrow\" \n" +
         "FROM resources AS r \n" +
