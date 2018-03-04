@@ -5,10 +5,10 @@ var fs = require("fs");
 var pgp = require('pg-promise')(/*options*/)
 var dataBaseConfig = require('../databaseConfig')
 var db = pgp(`postgres://${dataBaseConfig.user}:${dataBaseConfig.password}@${dataBaseConfig.host}/${dataBaseConfig.database}`)
-
+var thumb = require('node-thumbnail').thumb;
 
 router.get('/list/:id', function (req, res, next) {
-    var sql = "SELECT r.id, r.title, r.author, r.img, t.name AS type, r.date, CASE WHEN COUNT(b.id) = 0 THEN false ELSE true END as \"isBorrow\" \n" +
+    var sql = "SELECT r.id, r.title, r.author, r.img, r.publishing, t.name AS type, r.date, CASE WHEN COUNT(b.id) = 0 THEN false ELSE true END as \"isBorrow\" \n" +
         "FROM resources AS r \n" +
         "LEFT JOIN types AS t ON t.id = r.type\n" +
         "LEFT JOIN borrows as b on b.\"resourceId\" = r.id AND b.active\n" +
@@ -26,11 +26,14 @@ router.get('/list/:id', function (req, res, next) {
 router.post('/list/:id', function (req, res, next) {
     var where = '';
     if (req.body.filter) {
-        where += `WHERE r.type = ${req.params.id} AND  (title ~ '${req.body.filter}' OR title ~ '${req.body.filter.toUpperCase()}' OR title ~ '${req.body.filter.toLowerCase()}' OR title ~ '${req.body.filter.firstLower()}' OR title ~ '${req.body.filter.firstUpper()}')`;
+        where += `WHERE r.type = ${req.params.id} AND 
+        LOWER(title) ~ '${req.body.filter.toLowerCase()}' OR 
+        LOWER(publishing) ~ '${req.body.filter.toLowerCase()}' OR
+        LOWER(author) ~ '${req.body.filter.toLowerCase()}'`;
     } else {
         where += `WHERE r.type = ${req.params.id}`
     }
-    var sql = "SELECT r.id, r.title, r.author, r.img, t.name AS type, r.date, CASE WHEN COUNT(b.id) = 0 THEN false ELSE true END as \"isBorrow\" \n" +
+    var sql = "SELECT r.id, r.title, r.author, r.img, r.publishing, t.name AS type, r.date, CASE WHEN COUNT(b.id) = 0 THEN false ELSE true END as \"isBorrow\" \n" +
         "FROM resources AS r \n" +
         "LEFT JOIN types AS t ON t.id = r.type\n" +
         "LEFT JOIN borrows as b on b.\"resourceId\" = r.id AND b.active\n" +
@@ -47,7 +50,7 @@ router.post('/list/:id', function (req, res, next) {
 
 router.get('/get/:id', function (req, res, next) {
     var sendData = {details: null, borrows: []}
-    var sql = "SELECT r.id, r.title, r.author, r.img, t.name AS type, r.date\n" +
+    var sql = "SELECT r.id, r.title, r.author, r.img, r.publishing, t.name AS type, r.date\n" +
         "FROM resources AS r\n" +
         "LEFT JOIN types AS t ON t.id = r.type\n" +
         "WHERE r.id = $1";
@@ -85,20 +88,29 @@ router.get('/types', function (req, res, next) {
 });
 
 router.post('/add', function (req, res, next) {
-    console.log(req.body)
-    var data = req.body;
-    var sql = "INSERT INTO public.resources(title, author, date, type, img) VALUES ($1, $2, $3, $4, $5)";
+    var sql = "INSERT INTO public.resources(title, author, date, type, img, publishing) VALUES ($1, $2, $3, $4, $5, $6)";
     var imageName = data.image ? (new Date().getTime()) + data.image.filename : '';
-    db.query(sql, [data.title, data.author, new Date(), data.type, imageName])
+    db.query(sql, [data.title, data.author, new Date(), data.type, imageName, data.publishing])
         .then(function (data) {
             if (req.body.image) {
                 fs.writeFile("public/images/" + imageName, req.body.image.value, 'base64', function (err) {
                     if (err) {
                         console.error(err);
+                    } else {
+                        thumb({
+                            prefix: 'thumb_',
+                            suffix: '',
+                            source: 'public/images/' + imageName,
+                            destination: 'public/images',
+                            width: 200
+                        }, function (files, err, stdout, stderr) {
+                            if (!err) {
+                                res.json('OK');
+                            }
+                        });
                     }
                 });
             }
-            res.json('OK');
         })
         .catch(function (error) {
             console.error('ERROR:', error)
@@ -112,11 +124,11 @@ router.put('/update/:id', function (req, res, next) {
     var sqlParams = [];
     var imageName = data.image ? (new Date().getTime()) + data.image.filename : '';
     if (data.image) {
-        var sql = "UPDATE public.resources SET title = $1, author = $2, date = $3, type = $4, img = $5 WHERE id = $6;";
-        sqlParams = [data.title, data.author, new Date(), data.type, imageName, id]
+        var sql = "UPDATE public.resources SET title = $1, author = $2, date = $3, type = $4, img = $5, publishing = $6 WHERE id = $7;";
+        sqlParams = [data.title, data.author, new Date(), data.type, imageName, data.publishing, id]
     } else {
-        var sql = "UPDATE public.resources SET title = $1, author = $2, date = $3, type = $4 WHERE id = $5;";
-        sqlParams = [data.title, data.author, new Date(), data.type, id]
+        var sql = "UPDATE public.resources SET title = $1, author = $2, date = $3, type = $4, publishing = $5 WHERE id = $6;";
+        sqlParams = [data.title, data.author, new Date(), data.type, data.publishing, id]
     }
     db.query(sql, sqlParams)
         .then(function () {
@@ -124,11 +136,23 @@ router.put('/update/:id', function (req, res, next) {
                 fs.writeFile("public/images/" + imageName, data.image.value, 'base64', function (err) {
                     if (err) {
                         console.error(err);
+                    } else {
+                        thumb({
+                            prefix: 'thumb_',
+                            suffix: '',
+                            source: 'public/images/' + imageName,
+                            destination: 'public/images',
+                            width: 200
+                        }, function (files, err, stdout, stderr) {
+                            if (!err) {
+                                res.json('OK');
+                                clearImageFolder();
+                            }
+                        });
                     }
-                    clearImageFolder();
+
                 });
             }
-            res.json('OK');
         })
         .catch(function (error) {
             console.error('ERROR:', error)
@@ -195,6 +219,9 @@ router.get('/clearNoUsedImage', function (req, res, next) {
 
 var clearImageFolder = function () {
     fs.readdir("public/images/", function (err, files) {
+        files = files.map((file) => {
+            return file.replace('thumb_', '');
+        })
         var imgDataBase = [];
         var sql = "SELECT img FROM resources WHERE img IS NOT NULL AND img != '';"
         db.query(sql)
@@ -203,8 +230,23 @@ var clearImageFolder = function () {
                     return item.img;
                 })
                 var diff = files.diff(imgDataBase);
+                var thumb_diff = diff.map((item) => {
+                    return 'thumb_' + item;
+                })
+                diff = diff.concat(thumb_diff);
                 diff.forEach((file) => {
-                    fs.unlink('public/images/' + file);
+                    fs.stat('public/images/' + file, (err) => {
+                        if (err) {
+                            console.log('No exist')
+                        } else {
+                            console.log('Exist')
+                            fs.unlink('public/images/' + file, (err) => {
+                                if (!err) {
+                                    console.log('Done');
+                                }
+                            });
+                        }
+                    });
                 })
             })
             .catch(function (error) {
