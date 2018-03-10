@@ -88,14 +88,17 @@ router.get('/types', function (req, res, next) {
 });
 
 router.post('/add', function (req, res, next) {
+    var data = req.body;
     var sql = "INSERT INTO public.resources(title, author, date, type, img, publishing) VALUES ($1, $2, $3, $4, $5, $6)";
+    console.log('test')
     var imageName = data.image ? (new Date().getTime()) + data.image.filename : '';
     db.query(sql, [data.title, data.author, new Date(), data.type, imageName, data.publishing])
         .then(function (data) {
+            console.log('test2')
             if (req.body.image) {
                 fs.writeFile("public/images/" + imageName, req.body.image.value, 'base64', function (err) {
                     if (err) {
-                        console.error(err);
+                        console.log(err);
                     } else {
                         thumb({
                             prefix: 'thumb_',
@@ -106,14 +109,18 @@ router.post('/add', function (req, res, next) {
                         }, function (files, err, stdout, stderr) {
                             if (!err) {
                                 res.json('OK');
+                            } else {
+                                console.log(err)
                             }
                         });
                     }
                 });
+            } else {
+                res.json('OK');
             }
         })
         .catch(function (error) {
-            console.error('ERROR:', error)
+            console.log('ERROR:', error)
         })
 });
 
@@ -152,6 +159,8 @@ router.put('/update/:id', function (req, res, next) {
                     }
 
                 });
+            } else {
+                res.json('OK');
             }
         })
         .catch(function (error) {
